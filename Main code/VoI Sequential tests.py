@@ -66,7 +66,7 @@ L = norm(loc=L_mu, scale=L_sd)
 R_reinf = 500
 
 cost_dict = {'test': 1e3,
-             'test_failure': 1e6,
+             'test_failure': 1e8,
              'reinforcement': 1e4,
              'failure': 1e8}
 
@@ -75,75 +75,46 @@ n_grid = 100
 Pf_prior = calc_Pf(R=R_prior, L=L, n_grid=n_grid)
 Risk_prior = Pf_prior * cost_dict['failure']
 
-func = lambda F: exp_Risk(F=F, R_prior=R_prior, L=L, cost_dict=cost_dict, R_reinf=R_reinf, n_grid=n_grid)
+n_test_rounds = 2
+F_opt = np.zeros(n_test_rounds)
+R_Z1 = R_prior
+R_Z0 = R_prior
 
-# optimizer = minimize(func, x0=5000)
-# F_opt = optimizer['x']
+def sequential_exp_Risk(F_test):
 
-F_grid = np.linspace(0, 10_000, 100)
-risk = np.zeros_like(F_grid)
-Pf_Z1 = np.zeros_like(F_grid)
-Pf_Z0 = np.zeros_like(F_grid)
-Ps = np.zeros_like(F_grid)
-x = np.linspace(0, 10_000, 100)
-for i, f in enumerate(F_grid):
-    risk[i] = func(f)
+    exp_Risk_1 = exp_Risk(F=F_test[0], R_prior=R_prior, L=L, cost_dict=cost_dict, R_reinf=R_reinf, n_grid=n_grid)
 
-plt.figure()
-plt.plot(F_grid, risk)
-plt.xlabel('${F}_{test}$')
-plt.ylabel('E[Risk]')
+    Ps = calc_Ps(F=F_test[0], R=R_prior)
+    R_post_Z1 = truncnorm(loc=R_prior.kwds['loc'], scale=R_prior.kwds['scale'],
+                          a=(F_test[0] - R_prior.kwds['loc']) / R_prior.kwds['scale'], b=np.inf)
+    R_post_Z0 = truncnorm(loc=R_prior.kwds['loc'] + R_reinf, scale=R_prior.kwds['scale'], a=-np.inf, b=+np.inf)
 
-F_grid = np.linspace(0, 10_000, 100)
-inv_risk = np.zeros_like(F_grid)
-fail_risk = np.zeros_like(F_grid)
-for i, f in enumerate(F_grid):
-    inv_risk[i], fail_risk[i] = exp_Risk_comp(F=f, R_prior=R_prior, L=L, cost_dict=cost_dict, R_reinf=R_reinf, n_grid=n_grid)
+    exp_Risk_2Z1 = exp_Risk(F=F_test[1], R_prior=R_post_Z1, L=L, cost_dict=cost_dict, R_reinf=R_reinf, n_grid=n_grid)
+    exp_Risk_2Z0 = exp_Risk(F=F_test[1], R_prior=R_post_Z0, L=L, cost_dict=cost_dict, R_reinf=R_reinf, n_grid=n_grid)
+    exp_Risk_2 = Ps * exp_Risk_2Z1 + (1 - Ps) * exp_Risk_2Z0
 
-plt.figure()
-plt.plot(F_grid, inv_risk, label='Investment risk')
-plt.plot(F_grid, fail_risk, label='Failure risk')
-plt.plot(F_grid, inv_risk+fail_risk, label='Total risk')
-plt.xlabel('${F}_{test}$')
-plt.ylabel('E[Risk]')
-plt.legend()
+    return exp_Risk_1 + exp_Risk_2
+
+optimizer = minimize(sequential_exp_Risk, x0=np.array([5_000, 5_000]))
+F_opt = optimizer['x']
+
+n_mesh = 100
+F1_mesh, F2_mesh = np.meshgrid(np.linspace(0, 10_000, n_mesh), np.linspace(0, 10_000, n_mesh+1))
+
+exp_risk = np.zeros(F1_mesh.shape[0] * F1_mesh.shape[1])
+for i, (f1, f2) in enumerate(zip(F1_mesh.flatten(), F2_mesh.flatten())):
+    exp_risk[i] = sequential_exp_Risk(np.stack((f1, f2)))
 
 
+fig = plt.figure()
+plt.contourf(F1_mesh, F2_mesh, exp_risk.reshape(F1_mesh.shape[0], F1_mesh.shape[1]))
+plt.axvline(F_opt[0], color='r')
+plt.axhline(F_opt[1], color='r')
+plt.xlabel('${F}_{test,1}$', fontsize=16)
+plt.ylabel('${F}_{test,2}$', fontsize=16)
 
-# func = lambda F_vec: exp_Risk(F=F_vec[0], R_reinf=F_vec[1], cost_dict=cost_dict, R_prior=R_prior, L=L, n_grid=n_grid)
-#
-# # optimizer = minimize(func, x0=np.array([5000,1000]))
-# # F_vec_opt = optimizer['x']
-#
-# n = 50
-# F_test_grid = np.linspace(0, 10_000, n)
-# R_reinf_grid = np.linspace(0, 5_000, n+1)
-# F_test_mesh, R_reinf_mesh = np.meshgrid(F_test_grid, R_reinf_grid)
-#
-# risk_inv = np.zeros(F_test_mesh.shape[0]*F_test_mesh.shape[1])
-# risk_fail = np.zeros(F_test_mesh.shape[0]*F_test_mesh.shape[1])
-# exp_risk = np.zeros(F_test_mesh.shape[0]*F_test_mesh.shape[1])
-# for i, (f_test, R_reinf) in enumerate(zip(F_test_mesh.flatten(), R_reinf_mesh.flatten())):
-#     exp_risk[i] = func(np.stack((f_test, R_reinf)))
-#     risk_inv[i], risk_fail[i] = exp_Risk_comp(F=f_test, R_prior=R_prior, L=L, cost_dict=cost_dict, R_reinf=R_reinf, n_grid=100)
-#
-# exp_risk2 = risk_inv + risk_fail
-#
-# fig = plt.figure()
-# plt.contourf(F_test_mesh, R_reinf_mesh, exp_risk.reshape(F_test_mesh.shape[0], F_test_mesh.shape[1]))
-# plt.xlabel('${F}_{test}$', fontsize=16)
-# plt.ylabel('${F}_{reinf}$', fontsize=16)
-#
-# fig, ax = plt.subplots(1, 3)
-# ax[0].contourf(F_test_mesh, R_reinf_mesh, risk_inv.reshape(F_test_mesh.shape[0], F_test_mesh.shape[1]))
-# ax[0].set_xlabel('${F}_{test}$', fontsize=16)
-# ax[0].set_ylabel('${F}_{reinf}$', fontsize=16)
-# ax[0].set_title('Investment risk', fontsize=16)
-# ax[1].contourf(F_test_mesh, R_reinf_mesh, risk_fail.reshape(F_test_mesh.shape[0], F_test_mesh.shape[1]))
-# ax[1].set_xlabel('${F}_{test}$', fontsize=16)
-# ax[1].set_ylabel('${F}_{reinf}$', fontsize=16)
-# ax[1].set_title('Failure risk', fontsize=16)
-# ax[2].contourf(F_test_mesh, R_reinf_mesh, exp_risk2.reshape(F_test_mesh.shape[0], F_test_mesh.shape[1]))
-# ax[2].set_xlabel('${F}_{test}$', fontsize=16)
-# ax[2].set_ylabel('${F}_{reinf}$', fontsize=16)
-# ax[2].set_title('Total risk', fontsize=16)
+
+from mpl_toolkits import mplot3d
+ax = plt.axes(projection='3d')
+ax.plot_surface(F1_mesh, F2_mesh, exp_risk.reshape(F1_mesh.shape[0], F1_mesh.shape[1]),
+                rstride=1, cstride=1, cmap='viridis', edgecolor='none')
