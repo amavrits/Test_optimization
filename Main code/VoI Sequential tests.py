@@ -23,7 +23,9 @@ def exp_Risk(F, R_prior, L, cost_dict, R_reinf=0, n_grid=1_000):
                           a=(F - R_prior.kwds['loc']) / R_prior.kwds['scale'], b=np.inf)
     # R_post_Z0 = truncnorm(loc=R_prior.kwds['loc'] + R_reinf, scale=R_prior.kwds['scale'],
     #                       a=-np.inf, b=(F - (R_prior.kwds['loc'] + R_reinf)) / R_prior.kwds['scale'])
-    R_post_Z0 = truncnorm(loc=R_prior.kwds['loc'] + R_reinf, scale=R_prior.kwds['scale'], a=-np.inf, b=+np.inf)
+    # R_post_Z0 = truncnorm(loc=R_prior.kwds['loc'] + R_reinf, scale=R_prior.kwds['scale'], a=-np.inf, b=+np.inf)
+    R_post_Z0 = truncnorm(loc=R_prior.kwds['loc'] + R_reinf, scale=R_prior.kwds['scale'],
+                          a=(F-R_prior.kwds['loc'])/R_prior.kwds['scale'], b=+np.inf)
     Pf_Z1 = calc_Pf(R_post_Z1, L, n_grid=n_grid)
     Pf_Z0 = calc_Pf(R_post_Z0, L, n_grid=n_grid)
     exp_risk = cost_dict['test'] + Ps * Pf_Z1 * cost_dict['failure'] +\
@@ -44,7 +46,9 @@ def exp_Risk_comp(F, R_prior, L, cost_dict, R_reinf=0, n_grid=1_000):
                           a=(F - R_prior.kwds['loc']) / R_prior.kwds['scale'], b=np.inf)
     # R_post_Z0 = truncnorm(loc=R_prior.kwds['loc'] + R_reinf, scale=R_prior.kwds['scale'],
     #                       a=-np.inf, b=(F - (R_prior.kwds['loc'] + R_reinf)) / R_prior.kwds['scale'])
-    R_post_Z0 = truncnorm(loc=R_prior.kwds['loc'] + R_reinf, scale=R_prior.kwds['scale'], a=-np.inf, b=+np.inf)
+    # R_post_Z0 = truncnorm(loc=R_prior.kwds['loc'] + R_reinf, scale=R_prior.kwds['scale'], a=-np.inf, b=+np.inf)
+    R_post_Z0 = truncnorm(loc=R_prior.kwds['loc'] + R_reinf, scale=R_prior.kwds['scale'],
+                          a=(F-R_prior.kwds['loc'])/R_prior.kwds['scale'], b=+np.inf)
     Pf_Z1 = calc_Pf(R_post_Z1, L, n_grid=n_grid)
     Pf_Z0 = calc_Pf(R_post_Z0, L, n_grid=n_grid)
 
@@ -55,19 +59,19 @@ def exp_Risk_comp(F, R_prior, L, cost_dict, R_reinf=0, n_grid=1_000):
 
 #///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-R_mu = 5_000
-R_sd = 500
+R_mu = 6_000
+R_sd = 1_000
 R_prior = norm(loc=R_mu, scale=R_sd)
 
-L_mu =4_500
+L_mu = 2_700
 L_sd = 400
 L = norm(loc=L_mu, scale=L_sd)
 
 R_reinf = 500
 
-cost_dict = {'test': 1e3,
-             'test_failure': 1e8,
-             'reinforcement': 1e4,
+cost_dict = {'test': 1e2,
+             'test_failure': 1e3,
+             'reinforcement': 1e3,
              'failure': 1e8}
 
 n_grid = 100
@@ -87,7 +91,9 @@ def sequential_exp_Risk(F_test):
     Ps = calc_Ps(F=F_test[0], R=R_prior)
     R_post_Z1 = truncnorm(loc=R_prior.kwds['loc'], scale=R_prior.kwds['scale'],
                           a=(F_test[0] - R_prior.kwds['loc']) / R_prior.kwds['scale'], b=np.inf)
-    R_post_Z0 = truncnorm(loc=R_prior.kwds['loc'] + R_reinf, scale=R_prior.kwds['scale'], a=-np.inf, b=+np.inf)
+    # R_post_Z0 = truncnorm(loc=R_prior.kwds['loc'] + R_reinf, scale=R_prior.kwds['scale'], a=-np.inf, b=+np.inf)
+    R_post_Z0 = truncnorm(loc=R_prior.kwds['loc'] + R_reinf, scale=R_prior.kwds['scale'],
+                          a=(F_test[0]-R_prior.kwds['loc'])/R_prior.kwds['scale'], b=+np.inf)
 
     exp_Risk_2Z1 = exp_Risk(F=F_test[1], R_prior=R_post_Z1, L=L, cost_dict=cost_dict, R_reinf=R_reinf, n_grid=n_grid)
     exp_Risk_2Z0 = exp_Risk(F=F_test[1], R_prior=R_post_Z0, L=L, cost_dict=cost_dict, R_reinf=R_reinf, n_grid=n_grid)
@@ -110,11 +116,13 @@ fig = plt.figure()
 plt.contourf(F1_mesh, F2_mesh, exp_risk.reshape(F1_mesh.shape[0], F1_mesh.shape[1]))
 plt.axvline(F_opt[0], color='r')
 plt.axhline(F_opt[1], color='r')
-plt.xlabel('${F}_{test,1}$', fontsize=16)
-plt.ylabel('${F}_{test,2}$', fontsize=16)
+plt.title('Expected total risk', fontsize=16)
+plt.xlabel('${F}_{test,1}$ [kN]', fontsize=16)
+plt.ylabel('${F}_{test,2}$ [kN]', fontsize=16)
 
 
 from mpl_toolkits import mplot3d
+fig = plt.figure()
 ax = plt.axes(projection='3d')
 ax.plot_surface(F1_mesh, F2_mesh, exp_risk.reshape(F1_mesh.shape[0], F1_mesh.shape[1]),
                 rstride=1, cstride=1, cmap='viridis', edgecolor='none')
